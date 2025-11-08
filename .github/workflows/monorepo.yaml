@@ -1,0 +1,66 @@
+name: Monorepo Build
+    
+on:
+  push:
+    branches: [ main ]
+       
+jobs:
+  changes:
+    runs-on: [self-hosted, kubernetes]
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      api: ${{ steps.filter.outputs.api }}
+      
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        filters: |
+          frontend:
+          - 'frontend/**'
+          backend:
+          - 'backend/**'
+          api:
+          - 'api/**'
+      
+  build-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: [self-hosted, kubernetes]
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Frontend
+        run: |
+          cd frontend
+          docker build -t registry.local:5000/frontend:${{ github.sha }} .
+          docker push registry.local:5000/frontend:${{ github.sha }}
+      
+
+  build-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: [self-hosted, kubernetes]
+      
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Backend
+      run: |
+        cd backend
+        docker build -t registry.local:5000/backend:${{ github.sha }} .
+        docker push registry.local:5000/backend:${{ github.sha }}
+      
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: [self-hosted, kubernetes]
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build API
+      run: |
+        cd api
+        docker build -t registry.local:5000/api:${{ github.sha }} .
+        docker push registry.local:5000/api:${{ github.sha }}
