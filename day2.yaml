@@ -1,0 +1,445 @@
+# DAY 2: Advanced Pipeline Features
+# Multi-stage builds, caching, parallel jobs, matrix builds
+
+---
+# Advanced GitHub Actions Workflows ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: advanced-workflows
+  namespace: cicd
+data:
+  
+  
+  
+  # Parallel Job Execution
+  parallel-pipeline.yml: |
+    name: Parallel Pipeline
+    
+    on:
+      push:
+        branches: [ main ]
+    
+    jobs:
+      # Lint jobs run in parallel
+      lint-frontend:
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Lint Frontend
+          run: |
+            cd frontend
+            npm install
+            npm run lint
+      
+      lint-backend:
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Lint Backend
+          run: |
+            cd backend
+            go fmt ./...
+            go vet ./...
+      
+      # Unit tests run in parallel
+      test-unit-frontend:
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Frontend Unit Tests
+          run: |
+            cd frontend
+            npm install
+            npm run test:unit -- --coverage
+        - name: Upload coverage
+          uses: codecov/codecov-action@v3
+          with:
+            files: ./frontend/coverage/lcov.info
+            flags: frontend
+      
+      test-unit-backend:
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Backend Unit Tests
+          run: |
+            cd backend
+            go test -v -coverprofile=coverage.out ./...
+        - name: Upload coverage
+          uses: codecov/codecov-action@v3
+          with:
+            files: ./backend/coverage.out
+            flags: backend
+      
+      # Integration tests (depends on unit tests)
+      test-integration:
+        needs: [test-unit-frontend, test-unit-backend]
+        runs-on: [self-hosted, kubernetes]
+        services:
+          postgres:
+            image: postgres:14
+            env:
+              POSTGRES_PASSWORD: testpass
+            options: >-
+              --health-cmd pg_isready
+              --health-interval 10s
+              --health-timeout 5s
+              --health-retries 5
+          redis:
+            image: redis:7
+            options: >-
+              --health-cmd "redis-cli ping"
+              --health-interval 10s
+              --health-timeout 5s
+              --health-retries 5
+        
+        steps:
+        - uses: actions/checkout@v3
+        - name: Run Integration Tests
+          env:
+            DATABASE_URL: postgresql://postgres:testpass@postgres:5432/testdb
+            REDIS_URL: redis://redis:6379
+          run: |
+            npm run test:integration
+      
+      # Build (depends on all tests passing)
+      build:
+        needs: [lint-frontend, lint-backend, test-integration]
+        runs-on: [self-hosted, kubernetes]
+        outputs:
+          image-tag: ${{ steps.meta.outputs.tags }}
+        
+        steps:
+        - uses: actions/checkout@v3
+        
+        - name: Docker meta
+          id: meta
+          uses: docker/metadata-action@v4
+          with:
+            images: registry.local:5000/app
+            tags: |
+              type=ref,event=branch
+              type=sha,prefix={{branch}}-
+              type=semver,pattern={{version}}
+        
+        - name: Build and push
+          uses: docker/build-push-action@v4
+          with:
+            context: .
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            cache-from: type=registry,ref=registry.local:5000/app:buildcache
+            cache-to: type=registry,ref=registry.local:5000/app:buildcache,mode=max
+      
+      # Deployment (depends on build)
+      deploy:
+        needs: build
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - name: Deploy to Kubernetes
+          run: |
+            kubectl set image deployment/app app=${{ needs.build.outputs.image-tag }} -n dev
+            kubectl rollout status deployment/app -n dev
+  
+  # Monorepo Build Strategy
+  monorepo-build.yml: |
+    name: Monorepo Build
+    
+    on:
+      push:
+        branches: [ main ]
+    
+    jobs:
+      changes:
+        runs-on: [self-hosted, kubernetes]
+        outputs:
+          frontend: ${{ steps.filter.outputs.frontend }}
+          backend: ${{ steps.filter.outputs.backend }}
+          api: ${{ steps.filter.outputs.api }}
+        steps:
+        - uses: actions/checkout@v3
+        - uses: dorny/paths-filter@v2
+          id: filter
+          with:
+            filters: |
+              frontend:
+                - 'frontend/**'
+              backend:
+                - 'backend/**'
+              api:
+                - 'api/**'
+      
+      build-frontend:
+        needs: changes
+        if: needs.changes.outputs.frontend == 'true'
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Build Frontend
+          run: |
+            cd frontend
+            docker build -t registry.local:5000/frontend:${{ github.sha }} .
+            docker push registry.local:5000/frontend:${{ github.sha }}
+      
+      build-backend:
+        needs: changes
+        if: needs.changes.outputs.backend == 'true'
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Build Backend
+          run: |
+            cd backend
+            docker build -t registry.local:5000/backend:${{ github.sha }} .
+            docker push registry.local:5000/backend:${{ github.sha }}
+      
+      build-api:
+        needs: changes
+        if: needs.changes.outputs.api == 'true'
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - uses: actions/checkout@v3
+        - name: Build API
+          run: |
+            cd api
+            docker build -t registry.local:5000/api:${{ github.sha }} .
+            docker push registry.local:5000/api:${{ github.sha }}
+
+---
+# Job to manage build cache cleanup
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: registry-cleanup
+  namespace: cicd
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cleanup
+            image: registry:2.8
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Delete untagged manifests older than 7 days
+              registry garbage-collect --delete-untagged /etc/docker/registry/config.yml
+            
+            volumeMounts:
+            - name: registry-config
+              mountPath: /etc/docker/registry
+            
+            env:
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          
+          volumes:
+          - name: registry-config
+            configMap:
+              name: registry-config
+          
+          restartPolicy: OnFailure
+
+---
+# Build metrics exporter
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-metrics
+  namespace: cicd
+data:
+  collect-metrics.sh: |
+    #!/bin/bash
+    
+    # Collect GitHub Actions metrics via API
+    REPO="your-org/your-repo"
+    
+    # Get workflow runs
+    curl -H "Authorization: token ${GITHUB_TOKEN}" \
+      "https://api.github.com/repos/${REPO}/actions/runs?per_page=100" \
+      > /tmp/runs.json
+    
+    # Parse metrics
+    SUCCESS_COUNT=$(jq '[.workflow_runs[] | select(.conclusion=="success")] | length' /tmp/runs.json)
+    FAILURE_COUNT=$(jq '[.workflow_runs[] | select(.conclusion=="failure")] | length' /tmp/runs.json)
+    AVG_DURATION=$(jq '[.workflow_runs[].run_duration_ms] | add/length/1000' /tmp/runs.json)
+    
+    # Export to Prometheus format
+    cat <<EOF > /tmp/metrics.prom
+    # HELP github_actions_success_total Total successful workflow runs
+    # TYPE github_actions_success_total counter
+    github_actions_success_total ${SUCCESS_COUNT}
+    
+    # HELP github_actions_failure_total Total failed workflow runs
+    # TYPE github_actions_failure_total counter
+    github_actions_failure_total ${FAILURE_COUNT}
+    
+    # HELP github_actions_duration_seconds Average workflow duration
+    # TYPE github_actions_duration_seconds gauge
+    github_actions_duration_seconds ${AVG_DURATION}
+    EOF
+
+---
+# Deployment for metrics exporter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-metrics-exporter
+  namespace: cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: build-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: build-metrics-exporter
+    spec:
+      containers:
+      - name: exporter
+        image: prom/pushgateway:latest
+        ports:
+        - containerPort: 9091
+        
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: build-metrics-exporter
+  namespace: cicd
+  labels:
+    app: build-metrics-exporter
+spec:
+  selector:
+    app: build-metrics-exporter
+  ports:
+  - port: 9091
+    targetPort: 9091
+
+---
+# Webhook receiver for GitHub events
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webhook-receiver
+  namespace: cicd
+data:
+  server.py: |
+    from flask import Flask, request, jsonify
+    import hmac
+    import hashlib
+    import os
+    
+    app = Flask(__name__)
+    WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
+    
+    def verify_signature(payload, signature):
+        mac = hmac.new(WEBHOOK_SECRET.encode(), payload, hashlib.sha256)
+        return hmac.compare_digest('sha256=' + mac.hexdigest(), signature)
+    
+    @app.route('/webhook', methods=['POST'])
+    def webhook():
+        signature = request.headers.get('X-Hub-Signature-256')
+        
+        if not verify_signature(request.data, signature):
+            return jsonify({'error': 'Invalid signature'}), 403
+        
+        event = request.headers.get('X-GitHub-Event')
+        payload = request.json
+        
+        # Handle different events
+        if event == 'workflow_run':
+            print(f"Workflow: {payload['workflow_run']['name']}")
+            print(f"Status: {payload['workflow_run']['conclusion']}")
+            print(f"Duration: {payload['workflow_run']['run_duration_ms']}ms")
+        
+        return jsonify({'status': 'received'}), 200
+    
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8080)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-receiver
+  namespace: cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook-receiver
+  template:
+    metadata:
+      labels:
+        app: webhook-receiver
+    spec:
+      containers:
+      - name: receiver
+        image: python:3.11-slim
+        command:
+        - python
+        - /app/server.py
+        
+        ports:
+        - containerPort: 8080
+        
+        env:
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-webhook-secret
+              key: secret
+        
+        volumeMounts:
+        - name: webhook-code
+          mountPath: /app
+        
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+      
+      volumes:
+      - name: webhook-code
+        configMap:
+          name: webhook-receiver
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-receiver
+  namespace: cicd
+spec:
+  selector:
+    app: webhook-receiver
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-webhook-secret
+  namespace: cicd
+type: Opaque
+stringData:
+  secret: "your-webhook-secret-here"
