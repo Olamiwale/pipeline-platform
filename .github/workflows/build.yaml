@@ -108,7 +108,7 @@ jobs:
       - name: Update image tag
         run: |
           cd k8s/overlay/staging
-          kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kustomize edit set image sample-app=${{ env.REGISTRY }}/sample-app:${{ github.event.client_payload.sha }}
 
       - name: Commit and push
         run: |
