@@ -105,12 +105,7 @@ jobs:
           repository: olamiwale/pipeline-platform
           token: ${{ secrets.MY_GITHUB_TOKEN }}
 
-     # - name: Install Kustomize
-     #  run: |
-     #    curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-     #    sudo mv kustomize /usr/local/bin/
-
-
+   
       - name: Update image tag
         run: |
           cd k8s/overlay/staging
