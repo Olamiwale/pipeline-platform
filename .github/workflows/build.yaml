@@ -79,7 +79,7 @@ jobs:
 
       - name: Update image tag
         run: |
-          cd k8s/develop/dev
+          cd k8s/overlay/dev
           kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Commit changes
