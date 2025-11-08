@@ -109,15 +109,10 @@ jobs:
         run: |
           cd k8s/overlay/staging
           kustomize edit set image sample-app=${{ env.REGISTRY }}/sample-app:${{ github.event.client_payload.sha }}
-
-      - name: Commit and push
-        run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add .
           git diff --quiet && echo "No changes to commit" || (git commit -m "Update staging deployment image to ${{ github.sha }}" && git push)
-
-
 
 
   deploy-production:
