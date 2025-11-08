@@ -63,4 +63,96 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  
+
+
+  deploy-dev:
+    needs: build
+    runs-on: [self-hosted, kubernetes]
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          repository: your-org/your-k8s-config-repo
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+
+      - name: Update image tag
+        run: |
+          cd k8s/develop/dev
+          kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Commit changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "Update dev image to ${{ github.sha }}"
+          git push
+
+
+
+  deploy-staging:
+    needs: build
+    runs-on: [self-hosted, kubernetes]
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+
+    steps:
+      - name: Checkout manifests
+        uses: actions/checkout@v4
+        with:
+          repository: olamiwale/pipeline-platform
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+
+      - name: Update image tag
+        run: |
+          cd overlay/staging
+          kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          git diff --quiet && echo "No changes to commit" || (git commit -m "Update staging deployment image to ${{ github.sha }}" && git push)
+
+
+
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: [self-hosted, kubernetes]
+    environment: production
+
+    steps:
+      - name: Checkout manifests
+        uses: actions/checkout@v4
+        with:
+          repository: olamiwale/pipeline-platform
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+
+      - name: Update image tag
+        run: |
+          cd k8s/overlay/production
+          kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          git diff --quiet && echo "No changes to commit" || (git commit -m "Update staging deployment image to ${{ github.sha }}" && git push)
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: |
+            Deployed to production
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
