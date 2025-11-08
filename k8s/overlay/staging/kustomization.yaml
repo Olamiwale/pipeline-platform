@@ -1,0 +1,19 @@
+resources:
+- ../../base
+images:
+- name: sample-app
+  newName: /sample-app
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+
+
+#resources:
+#  - ../../base
+
+#images:
+#  - name: sample-app
+#    newName: ghcr.io/YOUR_GITHUB_USERNAME/sample-app
+#    newTag: latest
+
+#namespace: dev
