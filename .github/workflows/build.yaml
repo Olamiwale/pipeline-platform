@@ -72,9 +72,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          repository: your-org/your-k8s-config-repo
+          repository: olamiwale/pipeline-platform
           token: ${{ secrets.MY_GITHUB_TOKEN }}
 
       - name: Update image tag
