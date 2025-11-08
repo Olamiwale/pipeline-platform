@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: registry.local:5000
+  REGISTRY: registry.local
   IMAGE_NAME: sample-app
 
 jobs:
