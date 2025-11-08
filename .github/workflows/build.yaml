@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, kubernetes]
+    runs-on: [ self-hosted, kubernetes ]
 
     steps:
       - name: Checkout code
