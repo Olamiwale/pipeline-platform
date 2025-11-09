@@ -48,3 +48,9 @@ data:
     }
 
 
+
+
+
+# Provides a predefined Grafana dashboard (in JSON format) to visualize CI/CD metrics collected from:
+
+# These components turn your CI/CD pipeline into a measurable, observable system — where every build, push, and deployment is tracked, visualized, and can trigger further automation.
