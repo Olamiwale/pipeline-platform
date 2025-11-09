@@ -1,0 +1,17 @@
+# Ignore all files in temp folder
+
+zzzzz/
+
+
+# Ignore specific YAML files
+
+day2.yaml
+day3.yaml
+day4.yaml
+day5.yaml
+day6.yaml
+monorepo.yaml
+parallel-pipeline.yaml
+
+
+
