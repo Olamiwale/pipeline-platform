@@ -1,5 +1,8 @@
 resources:
-  - ../../base
+- ../../base
 images:
-  - name: sample-app
-    newTag: latest
+- name: sample-app
+  newName: registry.local:5000/sample-app
+  newTag: 719512f5a569edd76bd24130e66c7f84124390b7
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

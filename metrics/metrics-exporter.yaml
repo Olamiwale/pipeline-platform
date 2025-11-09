@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-metrics-exporter
+  namespace: cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: build-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: build-metrics-exporter
+    spec:
+      containers:
+      - name: exporter
+        image: prom/pushgateway:latest
+        ports:
+        - containerPort: 9091
+        
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: build-metrics-exporter
+  namespace: cicd
+  labels:
+    app: build-metrics-exporter
+spec:
+  selector:
+    app: build-metrics-exporter
+  ports:
+  - port: 9091
+    targetPort: 9091

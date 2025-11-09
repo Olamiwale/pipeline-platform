@@ -72,14 +72,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          repository: your-org/your-k8s-config-repo
+          repository: olamiwale/pipeline-platform
           token: ${{ secrets.MY_GITHUB_TOKEN }}
 
       - name: Update image tag
         run: |
-          cd k8s/develop/dev
+          cd k8s/overlay/dev
           kustomize edit set image sample-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Commit changes

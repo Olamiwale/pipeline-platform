@@ -1,0 +1,161 @@
+# DAY 3: ArgoCD & GitOps Setup
+# Install: kubectl create namespace argocd
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+---
+# ArgoCD Ingress
+
+
+---
+# ArgoCD Project for Multi-Environment
+
+
+---
+
+---
+# ArgoCD Image Updater Configuration
+
+
+---
+# Image Updater for Dev (auto-update latest images)
+
+
+---
+# Kustomize Base Structure
+
+
+---
+# ArgoCD Notifications Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.slack: |
+    token: $slack-token
+  
+  template.app-deployed: |
+    message: |
+      Application {{.app.metadata.name}} is now running version {{.app.status.sync.revision}}.
+      {{if eq .app.status.operationState.phase "Succeeded"}}
+        Deployment successful! :white_check_mark:
+      {{else}}
+        Deployment failed! :x:
+      {{end}}
+  
+  template.app-health-degraded: |
+    message: |
+      Application {{.app.metadata.name}} has degraded health status.
+      Details: {{.app.status.conditions}}
+  
+  trigger.on-deployed: |
+    - when: app.status.operationState.phase in ['Succeeded']
+      send: [app-deployed]
+  
+  trigger.on-health-degraded: |
+    - when: app.status.health.status == 'Degraded'
+      send: [app-health-degraded]
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-notifications-secret
+  namespace: argocd
+type: Opaque
+stringData:
+  slack-token: "xoxb-your-slack-bot-token"
+
+---
+# ApplicationSet for multiple environments
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multi-env-app
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+        replicas: "2"
+        autoSync: "true"
+      - env: staging
+        replicas: "3"
+        autoSync: "true"
+      - env: prod
+        replicas: "5"
+        autoSync: "false"
+  
+  template:
+    metadata:
+      name: 'app-{{env}}'
+    spec:
+      project: cicd-platform
+      source:
+        repoURL: https://github.com/your-org/k8s-manifests
+        targetRevision: main
+        path: 'overlays/{{env}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env}}'
+      syncPolicy:
+        automated:
+          prune: '{{autoSync}}'
+          selfHeal: '{{autoSync}}'
+
+---
+# GitHub Actions workflow to trigger ArgoCD sync
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-sync-workflow
+  namespace: cicd
+data:
+  sync-argocd.yml: |
+    name: Sync ArgoCD
+    
+    on:
+      push:
+        branches: [ main ]
+        paths:
+        - 'overlays/**'
+    
+    jobs:
+      sync:
+        runs-on: [self-hosted, kubernetes]
+        steps:
+        - name: Install ArgoCD CLI
+          run: |
+            curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+            chmod +x /usr/local/bin/argocd
+        
+        - name: Login to ArgoCD
+          run: |
+            argocd login argocd-server.argocd.svc.cluster.local:443 \
+              --username admin \
+              --password ${{ secrets.ARGOCD_PASSWORD }} \
+              --insecure
+        
+        - name: Sync Dev
+          if: contains(github.event.head_commit.modified, 'overlays/dev')
+          run: |
+            argocd app sync app-dev --prune
+            argocd app wait app-dev --health
+        
+        - name: Sync Staging
+          if: contains(github.event.head_commit.modified, 'overlays/staging')
+          run: |
+            argocd app sync app-staging --prune
+            argocd app wait app-staging --health
+        
+        - name: Request Production Sync
+          if: contains(github.event.head_commit.modified, 'overlays/production')
+          run: |
+            echo "Production sync requires manual approval"
+            # Create GitHub Issue for approval
+            gh issue create \
+              --title "Production Deployment Ready" \
+              --body "Changes ready for production deployment. Review and approve." \
+              --label "deployment,production"

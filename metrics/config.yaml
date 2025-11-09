@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-metrics
+  namespace: cicd
+data:
+  collect-metrics.sh: |
+    #!/bin/bash
+    
+    # Collect GitHub Actions metrics via API
+    REPO="your-org/your-repo"
+    
+    # Get workflow runs
+    curl -H "Authorization: token ${GITHUB_TOKEN}" \
+      "https://api.github.com/repos/${REPO}/actions/runs?per_page=100" \
+      > /tmp/runs.json
+    
+    # Parse metrics
+    SUCCESS_COUNT=$(jq '[.workflow_runs[] | select(.conclusion=="success")] | length' /tmp/runs.json)
+    FAILURE_COUNT=$(jq '[.workflow_runs[] | select(.conclusion=="failure")] | length' /tmp/runs.json)
+    AVG_DURATION=$(jq '[.workflow_runs[].run_duration_ms] | add/length/1000' /tmp/runs.json)
+    
+    # Export to Prometheus format
+    cat <<EOF > /tmp/metrics.prom
+    # HELP github_actions_success_total Total successful workflow runs
+    # TYPE github_actions_success_total counter
+    github_actions_success_total ${SUCCESS_COUNT}
+    
+    # HELP github_actions_failure_total Total failed workflow runs
+    # TYPE github_actions_failure_total counter
+    github_actions_failure_total ${FAILURE_COUNT}
+    
+    # HELP github_actions_duration_seconds Average workflow duration
+    # TYPE github_actions_duration_seconds gauge
+    github_actions_duration_seconds ${AVG_DURATION}
+    EOF

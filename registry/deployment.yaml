@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docker-registry
+  namespace: cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docker-registry
+  template:
+    metadata:
+      labels:
+        app: docker-registry
+    spec:
+      containers:
+      - name: registry
+        image: registry:2.8
+        ports:
+        - containerPort: 5000
+        
+        volumeMounts:
+        - name: registry-data
+          mountPath: /var/lib/registry
+        - name: registry-config
+          mountPath: /etc/docker/registry
+        - name: registry-auth
+          mountPath: /auth
+        
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      
+      volumes:
+      - name: registry-data
+        persistentVolumeClaim:
+          claimName: registry-pvc
+      - name: registry-config
+        configMap:
+          name: registry-config
+      - name: registry-auth
+        secret:
+          secretName: registry-auth
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docker-registry
+  namespace: cicd
+spec:
+  type: ClusterIP
+  selector:
+    app: docker-registry
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: registry
