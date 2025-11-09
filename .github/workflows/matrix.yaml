@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [14, 16, 18, 20]
+        node-version: [14]
         os: [linux, alpine]
         arch: [amd64, arm64]
       fail-fast: false
