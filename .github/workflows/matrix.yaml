@@ -27,7 +27,7 @@ jobs:
     - name: Build multi-arch image
       uses: docker/build-push-action@v4
       with:
-        context: .
+        context: ./app
         platforms: linux/${{ matrix.arch }}
         build-args: |
           NODE_VERSION=${{ matrix.node-version }}
