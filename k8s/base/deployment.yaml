@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: ghcr.io/YOUR_GITHUB_USERNAME/sample-app:latest 
+        image: briitz/sample-app:latest 
         ports:
         - containerPort: 80
         resources:

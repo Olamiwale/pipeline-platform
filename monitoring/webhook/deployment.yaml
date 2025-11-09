@@ -1,0 +1,99 @@
+#This is a GitHub Webhook Listener running a lightweight Python (Flask) app inside Kubernetes. 
+#Its job is to: 
+#Receive real-time GitHub workflow_run or push events,
+#Verify authenticity using the WEBHOOK_SECRET, 
+#Log, process, or forward build data to your metrics exporter. 
+
+
+#kubectl create namespace cicd
+#kubectl apply -f webhook-receiver.yaml
+#kubectl apply -f webhook-receiver-configmap.yaml
+#kubectl port-forward svc/webhook-receiver 8080:80 -n cicd 
+
+
+
+# On GitHub → Settings → Webhooks → Add webhook:
+
+#URL: http://<minikube-ip>:8080/webhook
+#Secret: same as in your github-webhook-secret
+#Content type: application/json
+#Select events: “Workflow runs” (or all)
+#You’ll start seeing event logs in your receiver’s pod.
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-receiver
+  namespace: cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook-receiver
+  template:
+    metadata:
+      labels:
+        app: webhook-receiver
+    spec:
+      containers:
+      - name: receiver
+        image: python:3.11-slim
+        command:
+        - python
+        - /app/server.py
+        
+        ports:
+        - containerPort: 8080
+        
+        env:
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-webhook-secret
+              key: secret
+        
+        volumeMounts:
+        - name: webhook-code
+          mountPath: /app
+        
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+      
+      volumes:
+      - name: webhook-code
+        configMap:
+          name: webhook-receiver
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-receiver
+  namespace: cicd
+spec:
+  selector:
+    app: webhook-receiver
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-webhook-secret
+  namespace: cicd
+type: Opaque
+stringData:
+  secret: "your-webhook-secret-here"
+
+
+
+
+
