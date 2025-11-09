@@ -16,10 +16,14 @@ namespace/
 registry/
 testing/
 webhook/
+metrics/
+runner/
 
 
 day2.yaml
 day3.yaml
 day4.yaml
 day5.yaml
+monorepo.yaml
+parallel-pipeline.yaml
 
