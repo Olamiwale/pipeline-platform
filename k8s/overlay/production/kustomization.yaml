@@ -1,5 +1,0 @@
-resources:
-  - ../../base
-images:
-  - name: sample-app
-    newTag: latest
