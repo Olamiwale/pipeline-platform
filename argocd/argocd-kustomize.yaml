@@ -1,3 +1,4 @@
+# argocd kustomization file
 apiVersion: v1
 kind: ConfigMap
 metadata:

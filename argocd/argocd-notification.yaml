@@ -1,0 +1,42 @@
+
+# ArgoCD Notifications Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.slack: |
+    token: $slack-token
+  
+  template.app-deployed: |
+    message: |
+      Application {{.app.metadata.name}} is now running version {{.app.status.sync.revision}}.
+      {{if eq .app.status.operationState.phase "Succeeded"}}
+        Deployment successful! :white_check_mark:
+      {{else}}
+        Deployment failed! :x:
+      {{end}}
+  
+  template.app-health-degraded: |
+    message: |
+      Application {{.app.metadata.name}} has degraded health status.
+      Details: {{.app.status.conditions}}
+  
+  trigger.on-deployed: |
+    - when: app.status.operationState.phase in ['Succeeded']
+      send: [app-deployed]
+  
+  trigger.on-health-degraded: |
+    - when: app.status.health.status == 'Degraded'
+      send: [app-health-degraded]
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-notifications-secret
+  namespace: argocd
+type: Opaque
+stringData:
+  slack-token: "xoxb-your-slack-bot-token"

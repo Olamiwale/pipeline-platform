@@ -1,0 +1,37 @@
+# GitHub Actions Workflow to Test Docker Build Cache Performance
+name: Cache Performance Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-no-cache:
+    runs-on: [self-hosted, kubernetes]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build without cache
+      run: |
+        START=$(date +%s)
+        docker build --no-cache -t test:no-cache .
+        END=$(date +%s)
+        echo "Build time without cache: $((END - START))s"
+
+  test-with-cache:
+    runs-on: [self-hosted, kubernetes]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build with cache
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        cache-from: type=registry,ref=registry.local:5000/app:buildcache
+        cache-to: type=registry,ref=registry.local:5000/app:buildcache,mode=max
+        tags: test:with-cache
+
+    - name: Compare results
+      run: |
+        echo "Cache hit rate and time saved reported in metrics"
+
+    

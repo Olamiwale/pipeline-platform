@@ -1,0 +1,177 @@
+# ArgoCD Project for Multi-Environment
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cicd-platform
+  namespace: argocd
+spec:
+  description: CI/CD Platform Applications
+  
+  sourceRepos:
+  - '*'
+  
+  destinations:
+  - namespace: 'dev'
+    server: https://kubernetes.default.svc
+  - namespace: 'staging'
+    server: https://kubernetes.default.svc
+  - namespace: 'prod'
+    server: https://kubernetes.default.svc
+  - namespace: 'cicd'
+    server: https://kubernetes.default.svc
+  
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+  
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  
+  roles:
+  - name: admin
+    description: Admin role
+    policies:
+    - p, proj:cicd-platform:admin, applications, *, */*, allow
+    groups:
+    - admins
+  
+  - name: developer
+    description: Developer role (read-only prod)
+    policies:
+    - p, proj:cicd-platform:developer, applications, *, dev/*, allow
+    - p, proj:cicd-platform:developer, applications, *, staging/*, allow
+    - p, proj:cicd-platform:developer, applications, get, prod/*, allow
+    groups:
+    - developers
+
+---
+# Development Environment Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-dev
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cicd-platform
+  
+  source:
+    repoURL: https://github.com/your-org/k8s-manifests
+    targetRevision: main
+    path: overlays/dev
+    
+    kustomize:
+      namePrefix: dev-
+      commonLabels:
+        environment: development
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+
+---
+# Staging Environment Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-staging
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cicd-platform
+  
+  source:
+    repoURL: https://github.com/your-org/k8s-manifests
+    targetRevision: main
+    path: overlays/staging
+    
+    kustomize:
+      namePrefix: staging-
+      commonLabels:
+        environment: staging
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    
+    syncOptions:
+    - CreateNamespace=true
+  
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Production Environment Application (Manual sync)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-prod
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: cicd-notifications
+spec:
+  project: cicd-platform
+  
+  source:
+    repoURL: https://github.com/your-org/k8s-manifests
+    targetRevision: main
+    path: overlays/production
+    
+    kustomize:
+      namePrefix: prod-
+      commonLabels:
+        environment: production
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  
+  # Manual sync for production
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+    
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

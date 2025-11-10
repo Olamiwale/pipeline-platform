@@ -1,0 +1,60 @@
+# Pod Chaos - Simulate pod failure
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure
+  namespace: cicd
+spec:
+  action: pod-failure
+  mode: one
+  duration: "30s"
+  selector:
+    namespaces:
+      - dev
+    labelSelectors:
+      app: sample-app
+  scheduler:
+    cron: "@every 1h"
+
+---
+# Network Chaos - Introduce latency
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay
+  namespace: cicd
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - dev
+    labelSelectors:
+      app: sample-app
+  delay:
+    latency: "100ms"
+    correlation: "100"
+    jitter: "0ms"
+  duration: "5m"
+  scheduler:
+    cron: "@every 2h"
+
+---
+# Stress Chaos - CPU/Memory stress
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: burn-cpu
+  namespace: cicd
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - staging
+    labelSelectors:
+      app: sample-app
+  stressors:
+    cpu:
+      workers: 2
+      load: 50
+  duration: "2m"

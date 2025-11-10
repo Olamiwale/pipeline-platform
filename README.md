@@ -28,6 +28,82 @@ self-hosted github runner
 
 
 
+Here’s a clear breakdown of each tool and how they’re used in GitHub Actions development:
+
+---
+
+### ⚙️ `act` by Nektos
+**Purpose:** Run GitHub Actions locally on your machine.
+
+**What it does:**
+- Simulates GitHub Actions workflows without needing to push to GitHub.
+- Helps test and debug workflows faster and offline.
+
+**How to use:**
+1. Install via Homebrew (`brew install act`) or download from [GitHub](https://github.com/nektos/act).
+2. Run a workflow locally:
+   ```bash
+   act
+   ```
+   You can specify events like:
+   ```bash
+   act push
+   act pull_request
+   ```
+
+**Why it’s useful:**
+- Speeds up development by avoiding commits just to test workflows.
+- Lets you catch runtime errors early.
+
+---
+
+
+-Validates YAML structure (indentation, spacing, etc.).
+yamllint .github/workflows/ci.yml
+
+
+
+actionlint
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,0 +1,36 @@
+# ApplicationSet for multiple environments
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multi-env-app
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+        replicas: "2"
+        autoSync: "true"
+      - env: staging
+        replicas: "3"
+        autoSync: "true"
+      - env: prod
+        replicas: "5"
+        autoSync: "false"
+  
+  template:
+    metadata:
+      name: 'app-{{env}}'
+    spec:
+      project: cicd-platform
+      source:
+        repoURL: https://github.com/your-org/k8s-manifests
+        targetRevision: main
+        path: 'overlays/{{env}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{env}}'
+      syncPolicy:
+        automated:
+          prune: '{{autoSync}}'
+          selfHeal: '{{autoSync}}'

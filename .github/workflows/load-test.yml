@@ -1,0 +1,47 @@
+# load-test.yml
+name: Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to test'
+        required: true
+        default: 'http://sample-app.dev'
+      duration:
+        description: 'Test duration (e.g., 5m, 10m)'
+        required: true
+        default: '5m'
+      vus:
+        description: 'Virtual users'
+        required: true
+        default: '50'
+
+jobs:
+  load-test:
+    runs-on: [self-hosted, kubernetes]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run K6 load test
+      run: |
+        kubectl create job load-test-${{ github.run_number }} \
+          --from=job/load-test \
+          --dry-run=client -o yaml | \
+        kubectl apply -f -
+
+    - name: Wait for test completion
+      run: |
+        kubectl wait --for=condition=complete \
+          job/load-test-${{ github.run_number }} \
+          --timeout=30m \
+          -n cicd
+
+    - name: Get test results
+      run: |
+        kubectl logs job/load-test-${{ github.run_number }} -n cicd
+
+    - name: Clean up K6 job
+      if: always()
+      run: |
+        kubectl delete job load-test-${{ github.run_number }} -n cicd

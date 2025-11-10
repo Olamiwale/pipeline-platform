@@ -1,0 +1,41 @@
+# ArgoCD Image Updater Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-image-updater-config
+  namespace: argocd
+data:
+  registries.conf: |
+    registries:
+    - name: Docker Registry
+      prefix: registry.local:5000
+      api_url: http://docker-registry.cicd.svc.cluster.local:5000
+      credentials: secret:cicd/registry-auth#htpasswd
+      insecure: true
+  
+  log.level: info
+
+---
+# Image Updater for Dev (auto-update latest images)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-dev-autoupdate
+  namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: app=registry.local:5000/sample-app
+    argocd-image-updater.argoproj.io/app.update-strategy: latest
+    argocd-image-updater.argoproj.io/write-back-method: git
+spec:
+  project: cicd-platform
+  source:
+    repoURL: https://github.com/your-org/k8s-manifests
+    targetRevision: main
+    path: overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

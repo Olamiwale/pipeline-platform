@@ -1,0 +1,55 @@
+name: Chaos engineering Test
+
+on:
+  schedule:
+    - cron: '0 10 * * 1' # every hour
+  workflow_dispatch:
+
+jobs:
+  chaos-test:
+    runs-on: [self-hosted, kubernetes]
+    steps:
+    - name: Apply Pod Failure Chaos
+      run: |
+        kubectl apply -f - <<EOF
+        apiVersion: chaos-mesh.org/v1alpha1
+        kind: PodChaos
+        metadata:
+          name: pod-failure
+          namespace: cicd
+        spec:
+          action: pod-failure
+          mode: one
+          duration: "30s"
+          selector:
+            namespaces:
+              - dev
+            labelSelectors:
+              app: sample-app
+          scheduler:
+            cron: "@every 1h"
+        EOF
+
+    - name: Monitor Application Health
+      run: |
+        sleep 10
+        for i in {1..30}; do
+          STATUS=$(kubectl get pods -n dev -l app=sample-app -o jsonpath='{.items[*].status.phase}')
+          echo "Attempt $i: Pod status - $STATUS"
+          if [[ "$STATUS" == *"Running"* ]]; then
+            echo "✓ Application recovered"
+            break
+          fi
+          sleep 10
+        done
+
+    - name: Check Metrics
+      run: |
+        # Query Prometheus for error rate during chaos
+        curl -G http://prometheus.monitoring:9090/api/v1/query \
+          --data-urlencode 'query=rate(http_requests_total{status=~"5.*"}[5m])'
+
+    - name: Cleanup Chaos
+      if: always()
+      run: |
+        kubectl delete podchaos pod-failure -n cicd

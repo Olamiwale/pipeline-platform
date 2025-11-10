@@ -13,8 +13,8 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       
     steps:
-    - uses: actions/checkout@v3
-    - uses: dorny/paths-filter@v2
+    - uses: actions/checkout@v4
+    - uses: dorny/paths-filter@v3
       id: filter
       with:
         filters: |
@@ -31,12 +31,12 @@ jobs:
     runs-on: [self-hosted, kubernetes]
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Build Frontend
-        run: |
-          cd frontend
-          docker build -t registry.local:5000/frontend:${{ github.sha }} .
-          docker push registry.local:5000/frontend:${{ github.sha }}
+      run: |
+        cd frontend
+        docker build -t registry.local:5000/frontend:${{ github.sha }} .
+        docker push registry.local:5000/frontend:${{ github.sha }}
       
 
   build-backend:
@@ -45,7 +45,7 @@ jobs:
     runs-on: [self-hosted, kubernetes]
       
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Build Backend
       run: |
         cd backend

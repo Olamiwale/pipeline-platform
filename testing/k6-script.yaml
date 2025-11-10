@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-scripts
+  namespace: cicd
+data:
+  load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+    
+    export const options = {
+      stages: [
+        { duration: '2m', target: 10 },   // Ramp up
+        { duration: '5m', target: 50 },   // Stay at 50 users
+        { duration: '2m', target: 100 },  // Spike
+        { duration: '5m', target: 50 },   // Scale down
+        { duration: '2m', target: 0 },    // Ramp down
+      ],
+      thresholds: {
+        http_req_duration: ['p(95)<500'],  // 95% requests under 500ms
+        http_req_failed: ['rate<0.01'],    // Error rate under 1%
+      },
+    };
+    
+    export default function () {
+      const res = http.get('http://sample-app.dev');
+      
+      check(res, {
+        'status is 200': (r) => r.status === 200,
+        'response time OK': (r) => r.timings.duration < 500,
+      });
+      
+      sleep(1);
+    }
+  
+  stress-test.js: |
+    import http from 'k6/http';
+    import { check } from 'k6';
+    
+    export const options = {
+      stages: [
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 100 },
+        { duration: '2m', target: 200 },
+        { duration: '5m', target: 200 },
+        { duration: '2m', target: 300 },
+        { duration: '5m', target: 300 },
+        { duration: '10m', target: 0 },
+      ],
+    };
+    
+    export default function () {
+      const res = http.get('http://sample-app.dev');
+      check(res, { 'status is 200': (r) => r.status === 200 });
+    }
+  
+  build-load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+    
+    export const options = {
+      vus: 50,
+      duration: '10m',
+    };
+    
+    export default function () {
+      // Simulate triggering 50 parallel builds
+      const payload = JSON.stringify({
+        ref: 'main',
+        inputs: {
+          test: 'true'
+        }
+      });
+      
+      const params = {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'token ${__ENV.GITHUB_TOKEN}',
+        },
+      };
+      
+      const res = http.post(
+        'https://api.github.com/repos/your-org/your-repo/actions/workflows/build.yml/dispatches',
+        payload,
+        params
+      );
+      
+      check(res, {
+        'workflow triggered': (r) => r.status === 204,
+      });
+      
+      sleep(10);
+    }

@@ -1,0 +1,46 @@
+# Github Actions workflow to sync ArgoCD applications
+name: Sync ArgoCD
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+    - 'overlays/**'
+
+jobs:
+  sync:
+    runs-on: [self-hosted, kubernetes]
+    steps:
+    - name: Install ArgoCD CLI
+      run: |
+        curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        chmod +x /usr/local/bin/argocd
+
+    - name: Login to ArgoCD
+      run: |
+        argocd login argocd-server.argocd.svc.cluster.local:443 \
+          --username admin \
+          --password ${{ secrets.ARGOCD_PASSWORD }} \
+          --insecure
+
+    - name: Sync Dev
+      if: contains(github.event.head_commit.modified, 'overlays/dev')
+      run: |
+        argocd app sync app-dev --prune
+        argocd app wait app-dev --health
+        
+    - name: Sync Staging
+      if: contains(github.event.head_commit.modified, 'overlays/staging')
+      run: |
+       argocd app sync app-staging --prune
+       argocd app wait app-staging --health
+        
+    - name: Request Production Sync
+      if: contains(github.event.head_commit.modified, 'overlays/production')
+      run: |
+        echo "Production sync requires manual approval"
+        # Create GitHub Issue for approval
+        gh issue create \
+          --title "Production Deployment Ready" \
+          --body "Changes ready for production deployment. Review and approve." \
+          --label "deployment,production"

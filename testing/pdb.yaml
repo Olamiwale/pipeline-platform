@@ -1,0 +1,61 @@
+---
+# PodDisruptionBudget for testing
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sample-app-pdb
+  namespace: dev
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: sample-app
+
+---
+# Priority Classes for build jobs
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority-build
+value: 1000
+globalDefault: false
+description: "High priority for urgent builds"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority-build
+value: 100
+globalDefault: false
+description: "Low priority for non-urgent builds"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priority-runner
+  namespace: cicd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: priority-runner
+  template:
+    metadata:
+      labels:
+        app: priority-runner
+    spec:
+      priorityClassName: high-priority-build
+      containers:
+      - name: runner
+        image: cicd-runner:latest
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+            

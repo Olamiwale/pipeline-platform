@@ -1,0 +1,83 @@
+# OPA Gatekeeper for Policy Enforcement
+# Install: kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+
+# Constraint Template: Require labels
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+        
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("Missing required labels: %v", [missing])
+        }
+
+---
+# Apply constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-app-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaces:
+      - prod
+  parameters:
+    labels:
+      - "app"
+      - "environment"
+      - "team"
+
+---
+# Audit logging
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-policy
+  namespace: kube-system
+data:
+  audit-policy.yaml: |
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    rules:
+    # Log all requests at Metadata level
+    - level: Metadata
+      omitStages:
+      - RequestReceived
+    
+    # Log pod changes at Request level
+    - level: Request
+      resources:
+      - group: ""
+        resources: ["pods"]
+      verbs: ["create", "update", "patch", "delete"]
+    
+    # Log secret access
+    - level: Metadata
+      resources:
+      - group: ""
+        resources: ["secrets"]
+      verbs: ["get", "list", "watch"]

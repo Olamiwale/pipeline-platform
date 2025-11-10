@@ -1,0 +1,44 @@
+# Trivy Security Scanner Job
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: image-security-scan
+  namespace: cicd
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: github-runner-sa
+          containers:
+          - name: trivy
+            image: aquasec/trivy:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Scan all images in registry
+              IMAGES=$(curl -s http://docker-registry:5000/v2/_catalog | jq -r '.repositories[]')
+              
+              for IMAGE in $IMAGES; do
+                echo "Scanning $IMAGE..."
+                trivy image --severity HIGH,CRITICAL \
+                  --exit-code 1 \
+                  --no-progress \
+                  registry.local:5000/$IMAGE:latest || echo "Vulnerabilities found in $IMAGE"
+              done
+            
+            env:
+            - name: TRIVY_INSECURE
+              value: "true"
+            
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "512Mi"
+              limits:
+                cpu: "1000m"
+                memory: "1Gi"
+          
+          restartPolicy: OnFailure
